@@ -100,7 +100,7 @@ class Butler(Node):
         self.current_pose = msg.pose.pose
 
     # =========================================================
-    # STATUS PUBLISHER (FULL VERSION)
+    # STATUS PUBLISHER 
     # =========================================================
     def publish_status(self):
 
@@ -196,7 +196,7 @@ class Butler(Node):
     def start_order(self, table):
         self.current_table = table
         self.state = State.GO_KITCHEN
-        self.get_logger().info(f"🚀 Starting order for {table}")
+        self.get_logger().info(f" Starting order for {table}")
         self.send_goal("kitchen")
 
     # =========================================================
