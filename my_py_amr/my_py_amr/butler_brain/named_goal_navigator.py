@@ -9,26 +9,27 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 
 from std_msgs.msg import String
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped
 from nav2_msgs.action import NavigateToPose
+from action_msgs.msg import GoalStatus
 
 
-# =========================================================
-# FSM STATES
-# =========================================================
+# =====================================================
+# STATES
+# =====================================================
 class State(Enum):
     IDLE = 0
     GO_KITCHEN = 1
     WAIT_KITCHEN = 2
     GO_TABLE = 3
     WAIT_TABLE = 4
-    GO_HOME = 5
-    RETURNING_TO_KITCHEN_CANCELLED = 6
+    RETURN_TO_KITCHEN_AFTER_CANCEL = 5
+    GO_DOCK = 6
 
 
-# =========================================================
+# =====================================================
 # BUTLER NODE
-# =========================================================
+# =====================================================
 class Butler(Node):
 
     def __init__(self):
@@ -45,166 +46,104 @@ class Butler(Node):
 
         self.valid_tables = ["table1", "table2", "table3"]
 
-        # ---------------- Robot State ----------------
+        # ---------------- State Variables ----------------
         self.state = State.IDLE
         self.current_table = None
         self.queue = deque()
         self.goal_handle = None
         self.wait_timer = None
-        self.current_pose = None
-        self.current_target = None
+        self.cancel_pending = False
 
-        # ---------------- Nav2 Action Client ----------------
+        # ---------------- Nav2 Client ----------------
         self.action_client = ActionClient(
             self, NavigateToPose, 'navigate_to_pose'
         )
 
         # ---------------- Subscribers ----------------
         self.create_subscription(
-            String,
-            '/go_to_location',
-            self.order_callback,
-            10
-        )
+            String, '/go_to_location',
+            self.order_callback, 10)
 
         self.create_subscription(
-            String,
-            '/cancel_order',
-            self.cancel_callback,
-            10
-        )
-
-        # Robot pose from AMCL
-        self.create_subscription(
-            PoseWithCovarianceStamped,
-            '/amcl_pose',
-            self.pose_callback,
-            10
-        )
+            String, '/cancel_order',
+            self.cancel_callback, 10)
 
         # ---------------- Status Publisher ----------------
         self.status_pub = self.create_publisher(
-            String,
-            '/butler_status',
-            10
-        )
+            String, '/butler_status', 10)
 
         self.create_timer(0.5, self.publish_status)
 
-        self.get_logger().info("✅ Butler Ready - Full Status Enabled")
+        self.get_logger().info("✅ Butler - Fully Stable Version Running")
 
-    # =========================================================
-    # POSE CALLBACK
-    # =========================================================
-    def pose_callback(self, msg):
-        self.current_pose = msg.pose.pose
-
-    # =========================================================
-    # STATUS PUBLISHER 
-    # =========================================================
+    # =====================================================
+    # STATUS PUBLISHER
+    # =====================================================
     def publish_status(self):
-
-        if self.current_pose:
-            x = round(self.current_pose.position.x, 2)
-            y = round(self.current_pose.position.y, 2)
-            position_text = f"({x}, {y})"
-        else:
-            position_text = "Unknown"
 
         msg = String()
         msg.data = (
             f"\n========== BUTLER STATUS ==========\n"
-            f"State        : {self.state.name}\n"
-            f"Action       : {self.get_action_description()}\n"
-            f"Current Order: {self.current_table if self.current_table else 'None'}\n"
-            f"Target       : {self.current_target if self.current_target else 'None'}\n"
-            f"Position     : {position_text}\n"
-            f"Queue        : {list(self.queue)}\n"
+            f"State          : {self.state.name}\n"
+            f"Current Table  : {self.current_table}\n"
+            f"Queue          : {list(self.queue)}\n"
+            f"Goal Active    : {self.goal_handle is not None}\n"
+            f"Cancel Pending : {self.cancel_pending}\n"
             f"===================================\n"
         )
 
         self.status_pub.publish(msg)
 
-    # =========================================================
-    # ACTION DESCRIPTION
-    # =========================================================
-    def get_action_description(self):
-
-        if self.state == State.IDLE:
-            return "Idle at Dock"
-
-        elif self.state == State.GO_KITCHEN:
-            return "Moving to Kitchen"
-
-        elif self.state == State.WAIT_KITCHEN:
-            return "Loading items at Kitchen"
-
-        elif self.state == State.GO_TABLE:
-            return f"Delivering to {self.current_table}"
-
-        elif self.state == State.WAIT_TABLE:
-            return f"Handing over order at {self.current_table}"
-
-        elif self.state == State.GO_HOME:
-            return "Returning to Dock"
-
-        elif self.state == State.RETURNING_TO_KITCHEN_CANCELLED:
-            return "Returning to Kitchen (Cancelled Order)"
-
-        return "Unknown"
-
-    # =========================================================
-    # ORDER RECEIVED
-    # =========================================================
+    # =====================================================
+    # ORDER CALLBACK
+    # =====================================================
     def order_callback(self, msg):
         table = msg.data.strip().lower()
 
         if table not in self.valid_tables:
-            self.get_logger().error(f"❌ Invalid table: {table}")
+            self.get_logger().error(f"Invalid table: {table}")
             return
 
         if self.state == State.IDLE:
             self.start_order(table)
         else:
             self.queue.append(table)
-            self.get_logger().info(f"📌 Order queued: {table}")
+            self.get_logger().info(f"Queued: {table}")
 
-    # =========================================================
-    # CANCEL ORDER
-    # =========================================================
+    # =====================================================
+    # CANCEL CALLBACK
+    # =====================================================
     def cancel_callback(self, msg):
-        self.get_logger().warn("⚠️ CANCEL REQUEST RECEIVED")
 
-        if self.state in [State.IDLE, State.GO_HOME]:
-            self.get_logger().info("Nothing to cancel.")
+        if self.state == State.IDLE:
             return
 
-        if self.goal_handle:
-            self.goal_handle.cancel_goal_async()
+        self.get_logger().warn("⚠ Cancel requested")
+
+        self.cancel_pending = True
 
         if self.wait_timer:
             self.wait_timer.cancel()
             self.wait_timer = None
 
-        self.current_table = None
-        self.state = State.RETURNING_TO_KITCHEN_CANCELLED
-        self.send_goal("kitchen")
+        if self.goal_handle:
+            self.goal_handle.cancel_goal_async()
 
-    # =========================================================
+    # =====================================================
     # START ORDER
-    # =========================================================
+    # =====================================================
     def start_order(self, table):
         self.current_table = table
         self.state = State.GO_KITCHEN
-        self.get_logger().info(f" Starting order for {table}")
         self.send_goal("kitchen")
 
-    # =========================================================
-    # SEND NAVIGATION GOAL
-    # =========================================================
+    # =====================================================
+    # SEND NAV GOAL
+    # =====================================================
     def send_goal(self, location_name):
 
-        self.current_target = location_name
+        if self.goal_handle:
+            return
 
         self.action_client.wait_for_server()
 
@@ -214,102 +153,122 @@ class Butler(Node):
         goal.pose = PoseStamped()
         goal.pose.header.frame_id = "map"
         goal.pose.header.stamp = self.get_clock().now().to_msg()
-
         goal.pose.pose.position.x = x
         goal.pose.pose.position.y = y
         goal.pose.pose.orientation.z = math.sin(yaw / 2.0)
         goal.pose.pose.orientation.w = math.cos(yaw / 2.0)
 
-        self.get_logger().info(f"➡️ Navigating to {location_name}")
+        self.get_logger().info(f"➡ Navigating to {location_name}")
 
         future = self.action_client.send_goal_async(goal)
         future.add_done_callback(self.goal_response)
 
-    # =========================================================
-    # GOAL RESPONSE
-    # =========================================================
     def goal_response(self, future):
-
         self.goal_handle = future.result()
 
         if not self.goal_handle.accepted:
-            self.get_logger().error("❌ Goal rejected by Nav2")
+            self.get_logger().error("Goal rejected")
+            self.goal_handle = None
             return
 
         result_future = self.goal_handle.get_result_async()
-        result_future.add_done_callback(self.goal_reached)
+        result_future.add_done_callback(self.goal_result)
 
-    # =========================================================
-    # GOAL REACHED
-    # =========================================================
-    def goal_reached(self, future):
+    # =====================================================
+    # GOAL RESULT HANDLER
+    # =====================================================
+    def goal_result(self, future):
 
+        result = future.result()
+        status = result.status
         self.goal_handle = None
 
-        self.get_logger().info(f"✅ Goal reached in state: {self.state.name}")
+        # ---------------- Handle Cancel ----------------
+        if status == GoalStatus.STATUS_CANCELED:
 
-        if self.state == State.GO_KITCHEN:
-            self.state = State.WAIT_KITCHEN
-            self.wait_timer = self.create_timer(5.0, self.after_kitchen)
+            self.get_logger().info("Goal was canceled")
 
-        elif self.state == State.GO_TABLE:
-            self.state = State.WAIT_TABLE
-            self.wait_timer = self.create_timer(5.0, self.after_table)
+            if self.state in [State.GO_TABLE, State.WAIT_TABLE]:
+                self.state = State.RETURN_TO_KITCHEN_AFTER_CANCEL
+                self.send_goal("kitchen")
+                return
 
-        elif self.state == State.RETURNING_TO_KITCHEN_CANCELLED:
-            self.check_queue_or_home()
+            if self.state in [State.GO_KITCHEN, State.WAIT_KITCHEN]:
+                self.current_table = None
+                self.cancel_pending = False
+                self.check_queue_or_idle()
+                return
 
-        elif self.state == State.GO_HOME:
-            self.state = State.IDLE
-            self.current_table = None
+        # ---------------- Handle Success ----------------
+        if status == GoalStatus.STATUS_SUCCEEDED:
 
-    # =========================================================
-    # AFTER KITCHEN WAIT
-    # =========================================================
+            if self.state == State.GO_KITCHEN:
+                self.state = State.WAIT_KITCHEN
+                self.wait_timer = self.create_timer(5.0, self.after_kitchen)
+                return
+
+            if self.state == State.GO_TABLE:
+                self.state = State.WAIT_TABLE
+                self.wait_timer = self.create_timer(5.0, self.after_table)
+                return
+
+            if self.state == State.RETURN_TO_KITCHEN_AFTER_CANCEL:
+                self.current_table = None
+                self.cancel_pending = False
+                self.check_queue_or_idle()
+                return
+
+            if self.state == State.GO_DOCK:
+                self.state = State.IDLE
+                return
+
+    # =====================================================
+    # WAIT CALLBACKS
+    # =====================================================
     def after_kitchen(self):
+
         if self.wait_timer:
             self.wait_timer.cancel()
             self.wait_timer = None
 
-        if self.state == State.WAIT_KITCHEN:
-            self.state = State.GO_TABLE
-            self.send_goal(self.current_table)
-
-    # =========================================================
-    # AFTER TABLE WAIT
-    # =========================================================
-    def after_table(self):
-        if self.wait_timer:
-            self.wait_timer.cancel()
-            self.wait_timer = None
-
-        if self.state == State.WAIT_TABLE:
+        if self.cancel_pending:
             self.current_table = None
-            self.check_queue_or_home()
+            self.cancel_pending = False
+            self.check_queue_or_idle()
+            return
 
-    # =========================================================
-    # CHAINING LOGIC
-    # =========================================================
-    def check_queue_or_home(self):
+        self.state = State.GO_TABLE
+        self.send_goal(self.current_table)
+
+    def after_table(self):
+
+        if self.wait_timer:
+            self.wait_timer.cancel()
+            self.wait_timer = None
+
+        self.current_table = None
+        self.check_queue_or_idle()
+
+    # =====================================================
+    # QUEUE HANDLER
+    # =====================================================
+    def check_queue_or_idle(self):
 
         if self.queue:
             next_table = self.queue.popleft()
             self.start_order(next_table)
         else:
-            self.state = State.GO_HOME
+            self.state = State.GO_DOCK
             self.send_goal("dock")
 
 
-# =========================================================
+# =====================================================
 # MAIN
-# =========================================================
+# =====================================================
 def main(args=None):
     rclpy.init(args=args)
     node = Butler()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
+    rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
 

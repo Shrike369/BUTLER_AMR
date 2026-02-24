@@ -259,6 +259,7 @@ Send an order:
 ```bash
 ros2 topic pub --once /go_to_location std_msgs/String "data: 'table1'"
 ```
+just change the table number for differnt table order
 
 Cancel order:
 ```bash
