@@ -28,7 +28,8 @@ setup(
             'republish_cmd_vel = my_py_amr.republish_cmd_vel:main',
             'republish_odometry = my_py_amr.republish_odometry:main',
             'republish_joint_states = my_py_amr.republish_joint_states:main',
-            'named_goal_navigator = my_py_amr.named_goal_navigator:main',
+            'butler = my_py_amr.butler_brain.named_goal_navigator:main',
+            'status_monitor = my_py_amr.butler_brain.status_monitor:main',
         ],
     },
 )

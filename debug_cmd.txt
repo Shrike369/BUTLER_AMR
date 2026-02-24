@@ -77,3 +77,24 @@ ros2 service call /compute_path_to_pose nav2_msgs/srv/ComputePathToPose "{goal: 
 
 // Note: Some commands (e.g., services) require the corresponding node to be active and
 // the message/service types to be available in your environment.
+
+
+Go to table1:
+
+ros2 topic pub --once /go_to_location std_msgs/msg/String "{data: table1}"
+
+Cancel order:
+
+ros2 topic pub --once /cancel_order std_msgs/msg/String "data: 'cancel'"
+
+Go to kitchen:
+
+ros2 topic pub --once /go_to_location std_msgs/msg/String "{data: kitchen}"
+
+Go home:
+
+ros2 topic pub --once /go_to_location std_msgs/msg/String "{data: dock}"
+
+status_monitor:
+
+ros2 run my_py_amr status_monitor

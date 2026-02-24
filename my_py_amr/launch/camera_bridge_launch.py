@@ -110,6 +110,7 @@ def generate_launch_description():
     # Include Nav2 bringup (use a params file in this package)
     nav2_share = get_package_share_directory('nav2_bringup')
     my_share = get_package_share_directory('my_py_amr')
+    # Include Nav2 bringup
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(nav2_share, 'launch', 'bringup_launch.py')),
         launch_arguments={
@@ -118,4 +119,27 @@ def generate_launch_description():
         }.items(),
     )
 
-    return LaunchDescription([parameter_bridge, camera_bridge, image_to_occupancy, top_marker_tf, republish_cmd, republish_odom, republish_joints, nav2_launch])
+    #  RViz2
+    rviz2_node = Node(
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            # arguments=['-d', rviz_config_dir], # Uncomment to load a specific config
+            output='screen'
+        )
+
+        
+     # 'butler' node from the 'my_py_amr' package
+    butler_node = Node(
+            package='my_py_amr',
+            executable='butler',
+            name='butler_node',
+            output='screen',
+            emulate_tty=True, # Helps with colored logs and print statements
+            parameters=[
+                # {'my_parameter': 'value'} # Add parameters here if needed
+            ]
+        )
+    
+
+    return LaunchDescription([parameter_bridge, camera_bridge, image_to_occupancy, top_marker_tf, republish_cmd, republish_odom, republish_joints, nav2_launch, rviz2_node, butler_node])

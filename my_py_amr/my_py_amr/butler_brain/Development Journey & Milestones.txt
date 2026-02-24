@@ -1,0 +1,198 @@
+ Butler Robot – Development Journey & Milestones
+🌱 Project Background
+
+This Butler Robot project was developed as part of my technical interview process with Goat Robotics. I gave myself three focused days to design and implement a structured autonomous delivery system.
+
+Instead of building everything from scratch, I decided to integrate this system on top of my previous vision-based AMR navigation project. That decision became the foundation of this entire implementation.
+
+This document outlines the key milestones I achieved, the challenges I faced, and how the system evolved step by step.
+
+
+📘 Milestone 1 – Integrating My Vision-Based AMR Navigation
+
+Before building the Butler logic, I already had a working vision-based AMR system that handled:
+
+Localization
+
+Navigation
+
+TF publishing
+
+Map handling
+
+Nav2 integration
+
+The first major milestone was successfully integrating the Butler delivery logic on top of that navigation stack.
+
+This step was important because:
+
+I was not just simulating movement.
+
+I was building on a real navigation architecture.
+
+The Butler system had to work reliably with an existing navigation pipeline.
+
+Once I confirmed that named goals (kitchen, tables, dock) were working correctly within my vision-based navigation setup, I knew I had a strong base to build the higher-level behavior system.
+
+This integration marked the real beginning of the Butler project.
+
+
+🧠 Milestone 2 – Designing the Finite State Machine
+
+After confirming stable navigation, I designed the Butler behavior using a Finite State Machine (FSM).
+
+Instead of writing linear scripts, I structured the robot into clearly defined states:
+
+IDLE
+
+GO_KITCHEN
+
+WAIT_KITCHEN
+
+GO_TABLE
+
+WAIT_TABLE
+
+GO_HOME
+
+RETURNING_TO_KITCHEN_CANCELLED
+
+This made the system:
+
+Predictable
+
+Easier to debug
+
+Easier to extend
+
+Architecturally clean
+
+This was where the project shifted from “navigation demo” to a proper robotic behavior system.
+
+
+📦 Milestone 3 – Order Handling & Queue Management
+
+Next, I implemented a real order management system.
+
+The robot now:
+
+Starts immediately if idle
+
+Queues orders if busy
+
+Uses FIFO logic
+
+Automatically chains deliveries
+
+This transformed the robot from a simple navigator into a service workflow system.
+
+Now it behaves like a restaurant assistant rather than a point-to-point robot.
+
+
+❌ Milestone 4 – Safe Cancellation Handling
+
+Handling cancellation was one of the most challenging parts.
+
+I needed to ensure:
+
+Navigation goals are properly cancelled
+
+Active timers are stopped
+
+The robot does not enter an inconsistent state
+
+It safely recovers
+
+My early attempts exposed issues like:
+
+Timers still running after cancel
+
+Unclear state transitions
+
+Risk of duplicate goal sending
+
+So I redesigned the cancellation logic completely.
+
+I introduced a dedicated state:
+RETURNING_TO_KITCHEN_CANCELLED
+
+Now the robot:
+
+Cancels navigation safely
+
+Cancels active wait timers
+
+Returns to kitchen
+
+Checks queue
+
+Continues or goes home
+
+This was a major improvement in system robustness.
+
+
+📡 Milestone 5 – Real-Time Status Publishing
+
+After stabilizing behavior, I added a status publisher.
+
+The robot continuously publishes:
+
+Current state
+
+Active order
+
+Pending queue
+
+This improved:
+
+Transparency
+
+Debugging
+
+Demonstration clarity
+
+System observability
+
+It made the project feel complete and structured.
+
+
+🔄 Things I Tried and Improved
+
+During development, I:
+
+Reworked state transitions multiple times
+
+Refactored navigation goal handling
+
+Simplified queue logic
+
+Cleaned up timer management
+
+Improved recovery flow
+
+Reduced tight coupling between states
+
+I chose clarity over shortcuts.
+
+Instead of making it “just work,” I focused on making it understandable and maintainable.
+
+
+
+🎯 What I Achieved
+
+By the end of this project, I successfully built:
+
+A Butler delivery system integrated with my vision-based AMR navigation
+
+A structured FSM-driven control architecture
+
+Multi-order queue management
+
+Safe global cancellation handling
+
+Automatic return-to-home logic
+
+Continuous system status publishing
+
+Most importantly, the system behaves predictably and safely.
+
