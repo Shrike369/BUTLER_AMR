@@ -250,6 +250,12 @@ This ensures:
 
 ## 1️⃣1️⃣ Usage
 
+Launch the gazebo:
+```bash
+gz sim a_whole_new_world.sdf
+```
+located at /src1/my_py_amr/map_gazebo/a_whole_new_world.sdf
+
 Launch the system:
 ```bash
 ros2 launch my_py_amr camera_bridge_launch.py
